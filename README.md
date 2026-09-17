@@ -200,7 +200,9 @@ Los datos de campo van en `datos/` — un CSV por ensayo, nombrado
 | 🔋 Autonomía | consumo y voltaje de batería en 24 h | ≥ 24 h |
 
 ---
-
+## <img src="https://cdn.simpleicons.org/youtube/FF0000" width="32"> Lista de reproducción de pruebas y desarrollo
+https://youtube.com/playlist?list=PLWRVOcGzSn6c&si=t2kUpIWlfrWhO4Ue
+---
 ## 👥 Autores
 
 **Mario Viteri** · **Erick Salorzano**
