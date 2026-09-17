@@ -8,7 +8,7 @@ código correspondiente a los microcontroladores utilizados para gobernar el har
 Proyecto de titulación — **ESPOL**.
 
 <p align="center">
-  <img src="docs/img/samna.jpg" alt="Catamarán SAMNA flotando en el agua durante pruebas de campo" width="700">
+  <img src="docs/samna.jpg" alt="Catamarán SAMNA flotando en el agua durante pruebas de campo" width="700">
 </p>
 
 > **Estado:** ✅ Prototipo terminado y verificado con hardware real.
