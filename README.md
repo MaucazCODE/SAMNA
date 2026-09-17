@@ -1,10 +1,15 @@
-# 🦐 SAMNA- SISTEMA DE ALIMENTACIÓN Y MONITOREO CON NAVEGACIÓN AUTÓNOMA
+# 🦐 SAMNA — SISTEMA DE ALIMENTACIÓN Y MONITOREO CON NAVEGACIÓN AUTÓNOMA
 
 Sistema autónomo de **alimentación, monitoreo y navegación** para piscinas
 camaroneras. Un catamarán flotante dosifica balanceado, mide los parámetros del
-agua y se opera a distancia desde una app Android. En este repositorio consta el código correspondiente a los microcontroladores utilizados para gobernar el hardware.
+agua y se opera a distancia desde una app Android. En este repositorio consta el
+código correspondiente a los microcontroladores utilizados para gobernar el hardware.
 
 Proyecto de titulación — **ESPOL**.
+
+<p align="center">
+  <img src="docs/img/samna.jpg" alt="Catamarán SAMNA flotando en el agua durante pruebas de campo" width="700">
+</p>
 
 > **Estado:** ✅ Prototipo terminado y verificado con hardware real.
 
@@ -200,8 +205,12 @@ Los datos de campo van en `datos/` — un CSV por ensayo, nombrado
 | 🔋 Autonomía | consumo y voltaje de batería en 24 h | ≥ 24 h |
 
 ---
-## <img src="https://cdn.simpleicons.org/youtube/FF0000" width="32"> Lista de reproducción de pruebas y desarrollo
-https://youtube.com/playlist?list=PLWRVOcGzSn6c&si=t2kUpIWlfrWhO4Ue
+## <img src="https://cdn.simpleicons.org/youtube/FF0000" width="28" align="top"> Pruebas y desarrollo
+
+Lista de reproducción con los videos de las pruebas y el desarrollo del prototipo:
+
+▶️ [Ver lista de reproducción en YouTube](https://youtube.com/playlist?list=PLWRVOcGzSn6c&si=t2kUpIWlfrWhO4Ue)
+
 ---
 ## 👥 Autores
 
