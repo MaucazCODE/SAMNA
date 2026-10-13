@@ -1,0 +1,17 @@
+{
+	"folders": [
+		{
+			"path": "../.."
+		},
+		{
+			"name": "estacion",
+			"path": ".."
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"*.ino": "cpp",
+			"*.h": "cpp"
+		}
+	}
+}

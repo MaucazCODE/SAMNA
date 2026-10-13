@@ -647,7 +647,7 @@ void loop() {
     handleKey((char)Serial.read());
 
     //para ver como tienen que ser los keys
-    printf((char)Serial.read())
+    Serial.println((char)Serial.read());
     //tentativamente hacer que se revise si esta en modo automatico o no
     //de estar en modo automatico, en vez de
   }
