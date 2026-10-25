@@ -108,6 +108,20 @@
 #define PIN_ESC_PORT      2   /* babor     */
 #define PIN_ESC_STBD      4   /* estribor  */
 
+/* ------------------------------------------------------------------
+ *  Mangetometro-Brujula digital HMC5883L — I2C, SDA/SCL.
+ * ------------------------------------------------------------------ */
+
+#define PIN_HMC5883L_SDA  SDA_OLED
+#define PIN_HMC5883L_SCL  SCL_OLED
+
+/* ------------------------------------------------------------------
+ *  GPS-Neo-6M — UART1, RX/TX.
+ * ------------------------------------------------------------------ */
+
+#define PIN_GPS_RX        19
+#define PIN_GPS_TX        20
+
 /* ==================================================================
  *  Regimenes PWM — dos distintos, no confundirlos
  *
