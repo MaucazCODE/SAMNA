@@ -366,6 +366,27 @@ bool firebaseWriteTlm(const TlmPacket *tlm) {
     stats.skippedNan++;
   }
 
+  if (!isnan(tlm->latitud)) {
+    json.set("latitud", round2(tlm->latitud));
+    fields++;
+  } else {
+    stats.skippedNan++;
+  }
+
+  if (!isnan(tlm->longitud)) {
+    json.set("longitud", round2(tlm->longitud));
+    fields++;
+  } else {
+    stats.skippedNan++;
+  }
+
+  if (!isnan(tlm->orientacion)) {
+    json.set("orientacion", round2(tlm->orientacion));
+    fields++;
+  } else {
+    stats.skippedNan++;
+  }
+
   /*
    * El nivel de sonido es un entero 0-100 y no puede llevar NAN, asi que su
    * centinela es el bit ST_SOUND_FAULT. Se omite igual que las otras dos

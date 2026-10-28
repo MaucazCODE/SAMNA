@@ -23,6 +23,10 @@
 #include "sensors.h"
 #include "thrusters.h"
 
+#include <TinyGPSPlus.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_HMC5883_U.h>
+
 /* ------------------------------------------------------------------
  *  Estado del banco
  * ------------------------------------------------------------------ */
@@ -155,6 +159,87 @@ static const char *navName(uint8_t nav) {
   }
 }
 
+
+
+/* ------------------------------------------------------------------
+ *  Variables y funciones para localizar y orientar
+ * ------------------------------------------------------------------ */
+
+TinyGPSPlus gps;
+#define gpsSerial Serial1 // Serial1 para el GPS
+
+typedef struct {
+    float latitud; //x
+    float longitud; //y
+} Coordenadas;
+
+Coordenadas coordenadasActuales = {0.0, 0.0}; // se empieza en 0
+
+// Inicializamos el magneomtro con un ID unico
+Adafruit_HMC5883_Unified mag = Adafruit_HMC5883_Unified(12345);
+
+float or_actual = 0.0; // orientacion actual en grados
+
+
+//funcion basada en libreria TinyGPSPlus para mostrar la informacion de localizacion, llamar para debugging
+void displayLocationInfo() {
+  Serial.println(F("-------------------------------------"));
+  Serial.println("Location Info:");
+
+  Serial.print("Latitude:  ");
+  Serial.print(gps.location.lat(), 6);
+  Serial.print(" ");
+  Serial.println(gps.location.rawLat().negative ? "S" : "N");
+
+  Serial.print("Longitude: ");
+  Serial.print(gps.location.lng(), 6);
+  Serial.print(" ");
+  Serial.println(gps.location.rawLng().negative ? "W" : "E");
+
+  Serial.print("Fix Quality: ");
+  Serial.println(gps.location.isValid() ? "Valid" : "Invalid");
+
+  Serial.print("Satellites: ");
+  Serial.println(gps.satellites.value());
+
+  Serial.print("Altitude:   ");
+  Serial.print(gps.altitude.meters());
+  Serial.println(" m");
+
+  Serial.print("Speed:      ");
+  Serial.print(gps.speed.kmph());
+  Serial.println(" km/h");
+
+  Serial.print("Course:     ");
+  Serial.print(gps.course.deg());
+  Serial.println("°");
+
+  Serial.print("Date:       ");
+  if (gps.date.isValid()) {
+    Serial.printf("%02d/%02d/%04d\n", gps.date.day(), gps.date.month(), gps.date.year());
+  } else {
+    Serial.println("Invalid");
+  }
+
+  Serial.print("Time (UTC): ");
+  if (gps.time.isValid()) {
+    Serial.printf("%02d:%02d:%02d\n", gps.time.hour(), gps.time.minute(), gps.time.second());
+  } else {
+    Serial.println("Invalid");
+  }
+
+  Serial.println(F("-------------------------------------"));
+}
+
+void actualizarCoordenadas(Coordenadas &coordenadas) {
+  if (gps.location.isUpdated()) {
+    coordenadas.latitud = gps.location.lat();
+    coordenadas.longitud = gps.location.lng();
+  }
+}
+
+
+
 /* ------------------------------------------------------------------
  *  Arranque
  * ------------------------------------------------------------------ */
@@ -167,6 +252,10 @@ void setup() {
   while (!Serial && (millis() - t0) < 3000) {
     delay(10);
   }
+
+  //gps
+  //Serial1.begin(9600, SERIAL_8N1, RX_PIN, TX_PIN);
+  Serial1.begin(9600, SERIAL_8N1, PIN_GPS_RX, PIN_GPS_TX);
 
   Serial.println();
   Serial.println(F("=================================================="));
@@ -886,6 +975,17 @@ static void sendTelemetry() {
    * clave: un cero se leeria en la app como piscina en silencio. */
   tlm.soundLevel = sensorSoundLevel();
 
+
+  /* Sonido REAL — MAX4466, paso 5c. Indice 0-100, no cuentas del ADC.
+   * Si el modulo no esta, el bit ST_SOUND_FAULT hace que Estacion omita la
+   * clave: un cero se leeria en la app como piscina en silencio. */
+  tlm.soundLevel = sensorSoundLevel();
+
+  /* GPS REAL — paso 5d. NAN si el sensor no esta o no responde. */
+  tlm.latitud = coordenadasActuales.latitud;
+  tlm.longitud = coordenadasActuales.longitud;
+  tlm.orientacion = or_actual;
+
   tlm.status = 0;
   if (actuatorsBusy()) { tlm.status |= ST_DOSING; }
   if (navActive)       { tlm.status |= ST_NAV_ACTIVE; }
@@ -972,6 +1072,34 @@ void loop() {
     radioRetry();
     return;
   }
+
+  //antes de seguir se asegura que se tengan las coordenadas del dispositivo
+  while (gpsSerial.available() > 0)
+    if (gps.encode(gpsSerial.read())){
+      actualizarCoordenadas(coordenadasActuales);
+       }
+  if (millis() > 5000 && gps.charsProcessed() < 10) {
+    Serial.println(F("No GPS detectada: revisa el cableado."));
+    delay(1500);
+  }
+
+  //luego de tener la orientacion
+  if(!mag.begin())
+    {
+      Serial.println("Ooops, no HMC5883 detectado revisa el cableado de este");
+      while(1);
+    }
+
+    //establecemos un cambio cuando se detecta un cambio en la orientacion del dispositivo
+  sensors_event_t event;
+  mag.getEvent(&event);
+
+  float or_actual = atan2(event.magnetic.y, event.magnetic.x);
+  // normalizamos a 0-360
+  if (or_actual < 0) {
+    or_actual = 360.0 + or_actual;
+  }
+
 
   linkPoll();
   sensorsPoll();

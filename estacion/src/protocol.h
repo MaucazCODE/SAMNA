@@ -210,6 +210,10 @@ typedef struct __attribute__((packed)) {
   float     temperature;  /* DS18B20, grados C. NAN si el sensor fallo */
   float     ph;           /* sonda de pH, 0-14.  NAN si el sensor fallo */
 
+  float latitud;        /* GPS, grados decimales. NAN si el sensor fallo */
+  float longitud;       /* GPS, grados decimales. NAN si el sensor fallo */
+  float   orientacion;   /* GPS, grados decimales. NAN si el sensor fallo */
+
   /*
    * MAX4466 — indice de actividad de alimentacion, 0-100.
    *
@@ -292,7 +296,7 @@ typedef struct __attribute__((packed)) {
 
 static_assert(sizeof(MsgHeader) == 6,  "MsgHeader debe medir 6 bytes");
 static_assert(sizeof(CmdPacket) == 11, "CmdPacket debe medir 11 bytes");
-static_assert(sizeof(TlmPacket) == 18, "TlmPacket debe medir 18 bytes");
+static_assert(sizeof(TlmPacket) == 30, "TlmPacket debe medir 30 bytes");
 static_assert(sizeof(AckPacket) == 10, "AckPacket debe medir 10 bytes");
 
 /*

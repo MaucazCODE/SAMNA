@@ -40,6 +40,7 @@
 #include "lora_link.h"
 #include "secrets.h"
 #include "wifi_link.h"
+#include <math.h>
 
 /* ==================================================================
  *  Mensajeria entre tareas
@@ -98,6 +99,93 @@ static uint8_t  curSprayer = 5;    /* medio recorrido del aspersor, 0-10  */
 static bool     radioReady     = false;
 static uint32_t lastRadioTryMs = 0;
 static uint32_t lastRadioMsgMs = 0;
+
+
+/* ==================================================================
+ *  Coordenadas estructura para poder leer de la lista y del LoRa
+ * ================================================================== */
+
+ typedef struct {
+    float latitud; //x
+    float longitud; //y
+} Coordenadas;
+
+/* ==================================================================
+ *  Funcion para planear ruta
+ * ================================================================== */
+
+float distanciaRECTA = 12.0; //un inicial mayor al margen de seguridad por si acaso acaba saltando algo
+float anguloRELATIVO = 0.0;
+
+static void planRUTA(Coordenadas trayecto_pasos ,Coordenadas coord_actual, float orienta_actual) {
+  // se convierte de grados a radianes
+  float lat1 = coord_actual.latitud;
+  float lon1 = coord_actual.longitud;
+  float lat2 = trayecto_pasos.latitud;
+  float lon2 = trayecto_pasos.longitud;
+  lat1 = lat1 * M_PI / 180.0;
+  lon1 = lon1 * M_PI / 180.0;
+  lat2 = lat2 * M_PI / 180.0;
+  lon2 = lon2 * M_PI / 180.0;
+  // Fomula "Haversine"
+  float dlat = lat2 - lat1;
+  float dlon = lon2 - lon1;
+  float a = sin(dlat/2) * sin(dlat/2) + cos(lat1) * cos(lat2) * sin(dlon/2) * sin(dlon/2);
+  float c = 2 * atan2(sqrt(a), sqrt(1-a));
+  //RADIO DE LA TIERRA EN METROS:
+  float r = 6371000;
+  float distance = c * r;
+  /*
+  Serial.println("Se tiene una distancia de: ");
+  Serial.println(distance);
+  */
+  //Calcular el rumbo al que apunta el siguiente punto de la trayectoria
+  float y = sin(dlon) * cos(lat2);
+  float x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(dlon);
+  float initial_bearing = atan2(y, x);
+  /*
+  Serial.println("Se esta mirando a: ");
+  Serial.println(orienta_actual);
+  */
+  // obtener angulo relativo conociendo el "bearing" al que debe ir y su orientacion actual
+  initial_bearing = initial_bearing * 180.0 / M_PI;
+  float bearing = fmod((initial_bearing + 360.0), 360.0);
+  /*
+  Serial.println("Se debe mirar hacia: ");
+  Serial.println(bearing);
+  */
+  float relative_angle = fmod((bearing - orienta_actual + 360.0), 360.0);
+  /*
+  Serial.println("Se tiene un angulo relativo de: ");
+  Serial.println(relative_angle);
+  */
+  distanciaRECTA = distance;
+  anguloRELATIVO = relative_angle;
+}
+
+
+
+/* ==================================================================
+ *  Control de navegacion autonoma
+ * ================================================================== */
+
+bool     nave_automatico     = false;
+int punteroLISTA = 0;
+int total_coordenadas = 0;
+
+Coordenadas coordenadas_trayecto[] = {
+};
+
+//la lista del trayecto empieza vacia, desde la app se llama a una función de llenado la cual
+//ademas corrige el tamaño de la lista
+//total_coordenadas = sizeof(coordenadas_trayecto) / sizeof(coordenadas_trayecto[0]);
+/*
+{-0.00f, -0.0f},
+    {0.0f, 0.0f},
+    {0.0f, 0.0f}*/
+//el formato que debe seguir
+/*
+
 
 /*
  * Vigilancia del tiempo de la TAREA LORA, que es la que lleva el requisito
@@ -391,7 +479,7 @@ static void taskLora(void *arg) {
 
       logf("[RX tlm  seq=%-5u] %.2f C  pH %.2f  ruido %-9s  estado 0x%02X"
            "  RSSI %d dBm  SNR %.1f dB  perdidos %lu\n",
-           tlm.hdr.seq, tlm.temperature, tlm.ph, sndTxt, tlm.status,
+           tlm.hdr.seq, tlm.temperature, tlm.ph, tlm.latitud, tlm.longitud, tlm.orientacion, tlm.status,
            s->rssi, s->snr, (unsigned long)s->lost);
       /* Se pasa a la red para el paso 4d. Si la cola esta llena se descarta:
        * mas vale perder una muestra que frenar la tarea de la radio. */
@@ -590,6 +678,40 @@ static void handleKey(char c) {
 }
 
 /* ==================================================================
+ *  algoritmo de navegacion
+ * ================================================================== */
+
+ void siguiendoRUTA() {
+
+  if (punteroLISTA >= total_coordenadas) {
+    punteroLISTA = 0; //REINICIANDO EL TRAYECTO CUANDO SE COMPLETA
+    return;
+  }
+
+  if (distanciaRECTA < 10) {
+    punteroLISTA = punteroLISTA+1; //yendo al siguiente punto
+  }
+  else {
+    if (anguloRELATIVO < 5.0 || anguloRELATIVO > 355.0){
+      //avanzar
+      handleKey('w');
+    }
+    else
+    {
+      if (anguloRELATIVO > 0.0 && anguloRELATIVO <= 180.0){
+        //girar_horario
+        handleKey('d');
+      }
+      else if (anguloRELATIVO > 180.0) {
+        //girar_antihorario
+        handleKey('a');
+        }
+    }
+  };
+
+}
+
+/* ==================================================================
  *  Arranque
  * ================================================================== */
 
@@ -650,6 +772,9 @@ void loop() {
     Serial.println((char)Serial.read());
     //tentativamente hacer que se revise si esta en modo automatico o no
     //de estar en modo automatico, en vez de
+    if (nave_automatico && total_coordenadas > 0) {
+      siguiendoRUTA();
+    }
   }
   vTaskDelay(pdMS_TO_TICKS(20));
 }
