@@ -176,6 +176,11 @@ int total_coordenadas = 0;
 Coordenadas coordenadas_trayecto[] = {
 };
 
+//valores iniciales, queremos que se actualize con el mensaje de LoRa cuando llegue desde piscina
+Coordenadas coord_actual = {0.0f, 0.0f};
+float orientacion_actual = 0.0f;
+
+
 //la lista del trayecto empieza vacia, desde la app se llama a una función de llenado la cual
 //ademas corrige el tamaño de la lista
 //total_coordenadas = sizeof(coordenadas_trayecto) / sizeof(coordenadas_trayecto[0]);
@@ -185,7 +190,6 @@ Coordenadas coordenadas_trayecto[] = {
     {0.0f, 0.0f}*/
 //el formato que debe seguir
 /*
-
 
 /*
  * Vigilancia del tiempo de la TAREA LORA, que es la que lleva el requisito
@@ -467,6 +471,11 @@ static void taskLora(void *arg) {
 
     TlmPacket tlm;
     if (linkTakeTlm(&tlm)) {
+      //se logro comunicar, entonces
+      coord_actual.latitud = tlm.latitud;
+      coord_actual.longitud = tlm.longitud;
+      orientacion_actual = tlm.orientacion;
+
       const LinkStats *s = linkStats();
       /* El ruido se imprime aparte porque un 0 con el micro caido y un 0
        * con la piscina callada son el mismo numero y cosas distintas. */
@@ -479,7 +488,7 @@ static void taskLora(void *arg) {
 
       logf("[RX tlm  seq=%-5u] %.2f C  pH %.2f  ruido %-9s  estado 0x%02X"
            "  RSSI %d dBm  SNR %.1f dB  perdidos %lu\n",
-           tlm.hdr.seq, tlm.temperature, tlm.ph, tlm.latitud, tlm.longitud, tlm.orientacion, tlm.status,
+           tlm.hdr.seq, tlm.temperature, tlm.ph, tlm.status,
            s->rssi, s->snr, (unsigned long)s->lost);
       /* Se pasa a la red para el paso 4d. Si la cola esta llena se descarta:
        * mas vale perder una muestra que frenar la tarea de la radio. */
@@ -773,6 +782,7 @@ void loop() {
     //tentativamente hacer que se revise si esta en modo automatico o no
     //de estar en modo automatico, en vez de
     if (nave_automatico && total_coordenadas > 0) {
+      planRUTA(coordenadas_trayecto[punteroLISTA], coord_actual, orientacion_actual);
       siguiendoRUTA();
     }
   }
