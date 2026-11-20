@@ -215,4 +215,5 @@ Lista de reproducción con los videos de las pruebas y el desarrollo del prototi
 ## 👥 Autores
 
 **Mario Viteri** · **Erick Salorzano**
-Escuela Superior Politécnica del Litoral (ESPOL)
+Original: Escuela Superior Politécnica del Litoral (ESPOL)
+FORK/Continuación: Mauricio Nicolas Cazón Alarcón 
