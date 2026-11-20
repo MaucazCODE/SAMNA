@@ -367,14 +367,14 @@ bool firebaseWriteTlm(const TlmPacket *tlm) {
   }
 
   if (!isnan(tlm->latitud)) {
-    json.set("latitud", round2(tlm->latitud));
+    json.set("latitud", tlm->latitud);
     fields++;
   } else {
     stats.skippedNan++;
   }
 
   if (!isnan(tlm->longitud)) {
-    json.set("longitud", round2(tlm->longitud));
+    json.set("longitud", tlm->longitud);
     fields++;
   } else {
     stats.skippedNan++;

@@ -86,6 +86,9 @@ bool firebaseTakeStop();
  *   /temperatura   float
  *   /ph            float
  *   /nivelSonido   int, indice de actividad 0-100
+ *   /latitud     float
+ *  /longitud    float
+ *  /orientacion float
  *
  * Una sola escritura y no tres: tres peticiones son tres viajes de red, y
  * ademas la app podria leer un estado a medias, con la temperatura nueva y
