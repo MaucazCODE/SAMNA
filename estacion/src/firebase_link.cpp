@@ -66,7 +66,7 @@ static FirebaseConfig config;
 static bool started = false;
 static bool online  = false;   /* ultima lectura buena */
 
-static FbCommands cmds  = { NAV_STOP, 0, 0, false };
+static FbCommands cmds  = { NAV_STOP, 0, 0, false, false };
 static bool       feedPending  = false;   /* flanco sin consumir     */
 static bool       clearPending = false;   /* /motores por poner en false */
 static bool       stopPending      = false;   /* flanco de /paro sin consumir */
@@ -148,6 +148,7 @@ static void applyTree(FirebaseJson *json) {
     clearStopPending = true;
   }
 
+
   if (json->get(r, "pwm")) {
     /*
      * Gramos, hasta GRAMS_MAX. El recorte estaba en 100 de cuando la app
@@ -165,6 +166,12 @@ static void applyTree(FirebaseJson *json) {
     if (v < 0)                 { v = 0; }
     if (v > SPRAYER_LEVEL_MAX) { v = SPRAYER_LEVEL_MAX; }
     cmds.sprayer = (uint8_t)v;
+  }
+
+  cmds.automatico = false;
+  if (json->get(r, "automatico") &&
+      r.typeNum == FirebaseJson::JSON_BOOL) {
+    cmds.automatico = r.boolValue;
   }
 
   if (json->get(r, "nav/adelante")) { navAdelante = r.boolValue; }

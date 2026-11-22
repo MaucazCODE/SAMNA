@@ -339,7 +339,7 @@ static void printFirebase() {
        "  media         %lu ms\n"
        "  peor llamada  %lu ms   (ya no afecta al enlace LoRa)\n"
        "  telemetria    %lu escritas / %lu fallidas / %lu claves NAN omitidas\n"
-       "  comandos: nav=%s  racion=%u g  aspersor=%u/10\n",
+       "  comandos: nav=%s  racion=%u g  aspersor=%u/10  automatico=%s\n",
        firebaseReady() ? "OK" : "sin conexion",
        (unsigned long)f->events, (unsigned long)f->reconnects,
        (unsigned long)f->errors, (unsigned long)f->calls,
@@ -348,7 +348,8 @@ static void printFirebase() {
        (unsigned long)f->maxCallMs,
        (unsigned long)f->writes, (unsigned long)f->writeFails,
        (unsigned long)f->skippedNan,
-       navName(c->nav), c->grams, c->sprayer);
+       navName(c->nav), c->grams, c->sprayer,
+       c->automatico ? "SI" : "NO");
 
   if (f->lastEventMs != 0) {
     logf("  ultimo evento hace %lu ms\n", (unsigned long)(millis() - f->lastEventMs));
@@ -571,6 +572,7 @@ static void taskNet(void *arg) {
 
     if (firebaseReady()) {
       const FbCommands *c = firebaseCommands();
+      nave_automatico = c->automatico;
       const bool changed = !fbEverApplied ||
                            c->nav     != fbLastNav ||
                            c->grams   != fbLastGrams ||

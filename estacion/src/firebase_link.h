@@ -9,6 +9,7 @@
  *   /motores    bool   dispara un ciclo de alimentacion
  *   /pwm        int    gramos de comida, 0-100  (nombre historico)
  *   /aspersor   int    nivel de velocidad del aspersor, 0-10
+ *   /automatico bool   activa o desactiva la navegacion autonoma
  *   /nav/adelante /nav/atras /nav/ho /nav/aho   bool
  *
  * QUE SE BORRA Y QUE NO — comprobado leyendo la app:
@@ -39,6 +40,7 @@ typedef struct {
   uint16_t grams;    /* /pwm, en gramos, hasta GRAMS_MAX        */
   uint8_t sprayer;   /* /aspersor, 0-10                       */
   bool    feed;      /* /motores, ya consumido si estaba true */
+  bool    automatico; /* /automatico, modo de navegacion */
 } FbCommands;
 
 /*
