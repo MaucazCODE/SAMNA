@@ -28,6 +28,7 @@
 
 #include <Arduino.h>
 #include <FirebaseESP32.h>
+#include <math.h>
 
 #include "secrets.h"
 #include "wifi_link.h"
@@ -72,6 +73,11 @@ static bool       clearPending = false;   /* /motores por poner en false */
 static bool       stopPending      = false;   /* flanco de /paro sin consumir */
 static bool       clearStopPending = false;   /* /paro por poner en false     */
 
+static FbCoordinate routeCoordinates[FB_ROUTE_MAX_COORDINATES];
+static size_t       routeCoordinateCount = 0;
+static bool         routeInitialized = false;
+static bool         routePending = false;
+
 static FbStats stats;
 static char    lastErr[128] = "";
 
@@ -113,6 +119,119 @@ static NavCmd resolveNav() {
   if (navAtras)    { return NAV_REVERSE; }
   if (navHo)       { return NAV_CW; }
   return NAV_CCW;
+}
+
+static bool readRoute(FirebaseJson *json, FbCoordinate *coordinates,
+                      size_t *count) {
+  FirebaseJsonData routeData;
+  *count = 0;
+
+  if (!json->get(routeData, "rutas/ruta1")) {
+    return true;
+  }
+  if (routeData.typeNum == FirebaseJson::JSON_NULL) {
+    return true;
+  }
+  if (routeData.typeNum != FirebaseJson::JSON_OBJECT) {
+    setError("ruta1 no es un objeto", routeData.type.c_str());
+    return false;
+  }
+
+  FirebaseJson route;
+  if (!routeData.getJSON(route)) {
+    setError("no se pudo leer ruta1", "objeto JSON invalido");
+    return false;
+  }
+
+  bool seen[FB_ROUTE_MAX_COORDINATES] = {};
+  size_t pointCount = 0;
+  bool valid = true;
+  const size_t entries = route.iteratorBegin();
+  for (size_t i = 0; i < entries; i++) {
+    int type = 0;
+    String key;
+    String value;
+    const int depth = route.iteratorGet(i, type, key, value);
+    if (depth != 0) {
+      continue;
+    }
+
+    if (type != FirebaseJson::JSON_OBJECT || pointCount >= FB_ROUTE_MAX_COORDINATES) {
+      valid = false;
+      break;
+    }
+
+    const long index = key.toInt();
+    if (index < 0 || index >= FB_ROUTE_MAX_COORDINATES ||
+        String(index) != key || seen[index]) {
+      valid = false;
+      break;
+    }
+    seen[index] = true;
+    pointCount++;
+  }
+  route.iteratorEnd();
+
+  if (!valid) {
+    setError("ruta1 invalida", "maximo 128 puntos con indices numericos");
+    return false;
+  }
+
+  for (size_t i = 0; i < pointCount; i++) {
+    if (!seen[i]) {
+      setError("ruta1 invalida", "los indices deben ser consecutivos desde 0");
+      return false;
+    }
+
+    FirebaseJsonData latitude;
+    FirebaseJsonData longitude;
+    char longitudePath[32];
+    char latitudePath[32];
+    snprintf(latitudePath, sizeof(latitudePath), "%u/latitud", (unsigned)i);
+    snprintf(longitudePath, sizeof(longitudePath), "%u/longitud", (unsigned)i);
+    if (!route.get(latitude, latitudePath) ||
+        !route.get(longitude, longitudePath) ||
+        (latitude.typeNum != FirebaseJson::JSON_INT &&
+         latitude.typeNum != FirebaseJson::JSON_FLOAT &&
+         latitude.typeNum != FirebaseJson::JSON_DOUBLE) ||
+        (longitude.typeNum != FirebaseJson::JSON_INT &&
+         longitude.typeNum != FirebaseJson::JSON_FLOAT &&
+         longitude.typeNum != FirebaseJson::JSON_DOUBLE)) {
+      setError("coordenada invalida en ruta1", "se requieren latitud y longitud numericas");
+      return false;
+    }
+
+    coordinates[i].latitud = latitude.to<float>();
+    coordinates[i].longitud = longitude.to<float>();
+    if (!isfinite(coordinates[i].latitud) || !isfinite(coordinates[i].longitud)) {
+      setError("coordenada invalida en ruta1", "latitud o longitud no finita");
+      return false;
+    }
+  }
+
+  *count = pointCount;
+  return true;
+}
+
+static void applyRoute(FirebaseJson *json) {
+  FbCoordinate parsed[FB_ROUTE_MAX_COORDINATES];
+  size_t parsedCount = 0;
+  if (!readRoute(json, parsed, &parsedCount)) {
+    parsedCount = 0;
+  }
+
+  bool changed = !routeInitialized || parsedCount != routeCoordinateCount;
+  for (size_t i = 0; !changed && i < parsedCount; i++) {
+    changed = parsed[i].latitud != routeCoordinates[i].latitud ||
+              parsed[i].longitud != routeCoordinates[i].longitud;
+  }
+
+  if (changed) {
+    memcpy(routeCoordinates, parsed, parsedCount * sizeof(FbCoordinate));
+    routeCoordinateCount = parsedCount;
+    routeInitialized = true;
+    routePending = true;
+  }
 }
 
 /* ==================================================================
@@ -179,6 +298,8 @@ static void applyTree(FirebaseJson *json) {
   if (json->get(r, "nav/ho"))       { navHo       = r.boolValue; }
   if (json->get(r, "nav/aho"))      { navAho      = r.boolValue; }
   cmds.nav = resolveNav();
+
+  applyRoute(json);
 }
 
 /* ==================================================================
@@ -437,6 +558,21 @@ bool firebaseReady() {
 
 const FbCommands *firebaseCommands() {
   return &cmds;
+}
+
+bool firebaseTakeRoute(FbCoordinate *coordinates, size_t capacity, size_t *count) {
+  if (!routePending) {
+    return false;
+  }
+  if (coordinates == NULL || count == NULL || capacity < routeCoordinateCount) {
+    setError("no se pudo copiar ruta1", "buffer de salida invalido o pequeno");
+    return false;
+  }
+
+  memcpy(coordinates, routeCoordinates, routeCoordinateCount * sizeof(FbCoordinate));
+  *count = routeCoordinateCount;
+  routePending = false;
+  return true;
 }
 
 bool firebaseTakeFeed() {

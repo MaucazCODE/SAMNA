@@ -57,6 +57,7 @@ typedef struct {
 /* LoRa -> consola, y en el paso 4d tambien a la red para escribirla. */
 static QueueHandle_t qCmd = NULL;
 static QueueHandle_t qTlm = NULL;
+static SemaphoreHandle_t routeMux = NULL;
 
 /*
  * Serial lo escriben las dos tareas y el bucle. Sin proteccion, dos printf
@@ -169,12 +170,12 @@ static void planRUTA(Coordenadas trayecto_pasos ,Coordenadas coord_actual, float
  *  Control de navegacion autonoma
  * ================================================================== */
 
-bool     nave_automatico     = false;
-int punteroLISTA = 0;
-int total_coordenadas = 0;
-
-Coordenadas coordenadas_trayecto[] = {
-};
+static bool nave_automatico = false;
+static int punteroLISTA = 0;
+static int total_coordenadas = 0;
+static Coordenadas coordenadas_trayecto[FB_ROUTE_MAX_COORDINATES] = {};
+static bool coord_actual_valida = false;
+static NavCmd ultimaNavAutomatica = NAV_STOP;
 
 //valores iniciales, queremos que se actualize con el mensaje de LoRa cuando llegue desde piscina
 Coordenadas coord_actual = {0.0f, 0.0f};
@@ -473,9 +474,29 @@ static void taskLora(void *arg) {
     TlmPacket tlm;
     if (linkTakeTlm(&tlm)) {
       //se logro comunicar, entonces
-      coord_actual.latitud = tlm.latitud;
-      coord_actual.longitud = tlm.longitud;
-      orientacion_actual = tlm.orientacion;
+      const bool posicionValida = isfinite(tlm.latitud) &&
+                                  isfinite(tlm.longitud) &&
+                                  isfinite(tlm.orientacion);
+      bool detenerPorPerdidaDeGPS = false;
+      if (xSemaphoreTake(routeMux, portMAX_DELAY) == pdTRUE) {
+        detenerPorPerdidaDeGPS = coord_actual_valida && !posicionValida &&
+                                  nave_automatico && total_coordenadas > 0;
+        coord_actual_valida = posicionValida;
+        if (posicionValida) {
+          coord_actual.latitud = tlm.latitud;
+          coord_actual.longitud = tlm.longitud;
+          orientacion_actual = tlm.orientacion;
+        } else if (detenerPorPerdidaDeGPS) {
+          curNav = NAV_STOP;
+          ultimaNavAutomatica = NAV_STOP;
+        }
+        xSemaphoreGive(routeMux);
+      }
+      if (detenerPorPerdidaDeGPS) {
+        linkSetNav(curNav, curGrams, curSprayer);
+        linkSendCmd();
+        logf("[NAV] GPS invalido; navegacion automatica detenida\n");
+      }
 
       const LinkStats *s = linkStats();
       /* El ruido se imprime aparte porque un 0 con el micro caido y un 0
@@ -572,7 +593,33 @@ static void taskNet(void *arg) {
 
     if (firebaseReady()) {
       const FbCommands *c = firebaseCommands();
-      nave_automatico = c->automatico;
+      FbCoordinate route[FB_ROUTE_MAX_COORDINATES];
+      size_t routeCount = 0;
+      const bool routeChanged =
+          firebaseTakeRoute(route, FB_ROUTE_MAX_COORDINATES, &routeCount);
+      bool wasAutomatic = false;
+
+      if (xSemaphoreTake(routeMux, portMAX_DELAY) == pdTRUE) {
+        wasAutomatic = nave_automatico;
+        if (routeChanged) {
+          for (size_t i = 0; i < routeCount; i++) {
+            coordenadas_trayecto[i].latitud = route[i].latitud;
+            coordenadas_trayecto[i].longitud = route[i].longitud;
+          }
+          total_coordenadas = (int)routeCount;
+          punteroLISTA = 0;
+        }
+        nave_automatico = c->automatico;
+        if (!nave_automatico) {
+          punteroLISTA = 0;
+        }
+        xSemaphoreGive(routeMux);
+      }
+
+      if (routeChanged) {
+        logf("[FB] ruta1 cargada: %u coordenadas\n", (unsigned)routeCount);
+      }
+
       const bool changed = !fbEverApplied ||
                            c->nav     != fbLastNav ||
                            c->grams   != fbLastGrams ||
@@ -591,6 +638,16 @@ static void taskNet(void *arg) {
         } else {
           logf("[FB->LoRa] nav=%s racion=%u g aspersor=%u/10%s\n",
                navName(c->nav), c->grams, c->sprayer, feed ? "  + ALIMENTAR" : "");
+        }
+      }
+
+      const bool stopAutomaticNavigation =
+          (wasAutomatic && !c->automatico) ||
+          (routeChanged && routeCount == 0 && c->automatico);
+      if (stopAutomaticNavigation) {
+        NetCmd stop = { (uint8_t)NAV_STOP, c->grams, c->sprayer, (uint8_t)FEED_NONE };
+        if (xQueueSend(qCmd, &stop, 0) != pdTRUE) {
+          logf("[FB] cola llena; no se pudo detener la navegacion automatica\n");
         }
       }
     }
@@ -629,7 +686,17 @@ static void pushCmd(bool feed) {
        navName(curNav), curGrams, curSprayer, feed ? "  + ALIMENTAR" : "");
 }
 
+static void setAutomaticNav(NavCmd nav) {
+  if (ultimaNavAutomatica == nav) {
+    return;
+  }
+  ultimaNavAutomatica = nav;
+  curNav = nav;
+  pushCmd(false);
+}
+
 static void handleKey(char c) {
+  ultimaNavAutomatica = NAV_STOP;
   switch (c) {
     case 'w': case 'W': curNav = NAV_FORWARD; pushCmd(false); break;
     case 's': case 'S': curNav = NAV_REVERSE; pushCmd(false); break;
@@ -705,17 +772,17 @@ static void handleKey(char c) {
   else {
     if (anguloRELATIVO < 5.0 || anguloRELATIVO > 355.0){
       //avanzar
-      handleKey('w');
+      setAutomaticNav(NAV_FORWARD);
     }
     else
     {
       if (anguloRELATIVO > 0.0 && anguloRELATIVO <= 180.0){
         //girar_horario
-        handleKey('d');
+        setAutomaticNav(NAV_CW);
       }
       else if (anguloRELATIVO > 180.0) {
         //girar_antihorario
-        handleKey('a');
+        setAutomaticNav(NAV_CCW);
         }
     }
   };
@@ -734,6 +801,7 @@ void setup() {
   }
 
   serialMux = xSemaphoreCreateMutex();
+  routeMux = xSemaphoreCreateMutex();
 
   Serial.println();
   Serial.println(F("=================================================="));
@@ -747,8 +815,8 @@ void setup() {
 
   qCmd = xQueueCreate(8, sizeof(NetCmd));
   qTlm = xQueueCreate(4, sizeof(TlmPacket));
-  if (qCmd == NULL || qTlm == NULL) {
-    Serial.println(F("ERROR: no hay memoria para las colas"));
+  if (qCmd == NULL || qTlm == NULL || serialMux == NULL || routeMux == NULL) {
+    Serial.println(F("ERROR: no hay memoria para colas o mutex"));
     while (true) { delay(1000); }
   }
 
@@ -778,15 +846,20 @@ void setup() {
 void loop() {
   while (Serial.available() > 0) {
     handleKey((char)Serial.read());
+  }
 
-    //para ver como tienen que ser los keys
-    Serial.println((char)Serial.read());
-    //tentativamente hacer que se revise si esta en modo automatico o no
-    //de estar en modo automatico, en vez de
-    if (nave_automatico && total_coordenadas > 0) {
-      planRUTA(coordenadas_trayecto[punteroLISTA], coord_actual, orientacion_actual);
-      siguiendoRUTA();
+  if (xSemaphoreTake(routeMux, portMAX_DELAY) == pdTRUE) {
+    if (!nave_automatico || total_coordenadas == 0) {
+      ultimaNavAutomatica = NAV_STOP;
+    } else if (coord_actual_valida) {
+      if (punteroLISTA >= total_coordenadas) {
+        punteroLISTA = 0;
+      } else {
+        planRUTA(coordenadas_trayecto[punteroLISTA], coord_actual, orientacion_actual);
+        siguiendoRUTA();
+      }
     }
+    xSemaphoreGive(routeMux);
   }
   vTaskDelay(pdMS_TO_TICKS(20));
 }

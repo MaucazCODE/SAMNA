@@ -3,14 +3,14 @@
  * ------------------------------------------------------------------
  * Lectura de comandos desde Realtime Database. Paso 4c.
  *
- * El esquema es PLANO a proposito: la app Android lee estas claves de raiz
- * directamente. No crear nodos anidados ni añadir claves sin acordarlo.
+ * Los comandos viven en la raiz, salvo nav y rutas/ruta1.
  *
  *   /motores    bool   dispara un ciclo de alimentacion
  *   /pwm        int    gramos de comida, 0-100  (nombre historico)
  *   /aspersor   int    nivel de velocidad del aspersor, 0-10
  *   /automatico bool   activa o desactiva la navegacion autonoma
  *   /nav/adelante /nav/atras /nav/ho /nav/aho   bool
+ *   /rutas/ruta1/<indice>/latitud y longitud   float
  *
  * QUE SE BORRA Y QUE NO — comprobado leyendo la app:
  *
@@ -31,8 +31,16 @@
 #pragma once
 
 #include <stdint.h>
+#include <stddef.h>
 
 #include "protocol.h"
+
+#define FB_ROUTE_MAX_COORDINATES 128
+
+typedef struct {
+  float latitud;
+  float longitud;
+} FbCoordinate;
 
 /* Estado de los comandos, tal y como estan en la base ahora mismo. */
 typedef struct {
@@ -57,6 +65,13 @@ bool firebaseReady();
 
 /* Estado actual de los comandos. Siempre valido; arranca todo a cero. */
 const FbCommands *firebaseCommands();
+
+/*
+ * Copia una vez cada cambio de /rutas/ruta1, ordenado por sus indices
+ * numericos consecutivos desde "0". Un resultado vacio limpia la ruta
+ * anterior. Devuelve false si no hay cambios pendientes.
+ */
+bool firebaseTakeRoute(FbCoordinate *coordinates, size_t capacity, size_t *count);
 
 /*
  * true una sola vez por cada flanco de /motores.
